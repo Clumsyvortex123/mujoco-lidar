@@ -8,6 +8,13 @@ Ships with a demo world of vertical obstacles, a keyboard-driven sensor, and a
 browser point cloud viewer — but the sensor itself has no dependency on any of
 that. Core requirements are **mujoco and numpy only**.
 
+![Azimuth samples around a ring, rings stacked in elevation, and one azimuth column swept across every ring](docs/beam_pattern.gif)
+
+A scan is a lattice, not a bag of directions: **azimuth step** samples one ring
+around a full turn, **rings** stack those circles in elevation, and
+**elev_min/max** set how wide the fan opens. The last shot sweeps one azimuth
+column — every ring at the same bearing.
+
 ```
       model                        scanner                      cloud
  ┌────────────────┐        ┌───────────────────────┐      ┌───────────────┐
