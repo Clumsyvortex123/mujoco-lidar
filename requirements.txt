@@ -1,5 +1,5 @@
 # Core sensor (mujoco_lidar.scanner / .cloud)
-mujoco>=3.2
+mujoco>=3.11
 numpy>=1.24
 
 # Demo applications only (sim.py, viewer_server.py)

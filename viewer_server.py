@@ -27,7 +27,6 @@ from mujoco_lidar.comms import (
 
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 
-# Silence the per-request access log; the polling loop would drown everything.
 import logging
 logging.getLogger("werkzeug").setLevel(logging.WARNING)
 
@@ -91,8 +90,6 @@ cache = CloudCache()
 cmd_pub = None
 
 
-# --- routes ----------------------------------------------------------------
-
 @app.route("/")
 def index():
     return send_from_directory(app.static_folder, "index.html")
@@ -155,8 +152,6 @@ def api_status():
     return jsonify(cache.stats())
 
 
-# ---------------------------------------------------------------------------
-
 def main():
     global cmd_pub
 
@@ -192,8 +187,6 @@ def main():
     signal.signal(signal.SIGINT, shutdown)
     signal.signal(signal.SIGTERM, shutdown)
 
-    # threaded=True so the cloud poll and the command POSTs do not serialise
-    # behind each other; use_reloader=False so we do not open two zenoh sessions.
     app.run(host=args.host, port=args.port, threaded=True,
             debug=args.debug, use_reloader=False)
 

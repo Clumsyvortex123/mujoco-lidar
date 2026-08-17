@@ -16,8 +16,10 @@ classifiers = [
   "Programming Language :: Python :: 3",
   "Topic :: Scientific/Engineering",
 ]
+# mj_multiRay takes a `normal` output array, which older MuJoCo builds do not
+# accept. 3.11 is the floor this package is verified against.
 dependencies = [
-  "mujoco>=3.2",
+  "mujoco>=3.11",
   "numpy>=1.24",
 ]
 

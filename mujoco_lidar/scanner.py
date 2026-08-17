@@ -14,30 +14,6 @@ import mujoco
 __all__ = ["LidarConfig", "LidarScanner"]
 
 
-# ``mj_multiRay`` gained a ``normal`` output array in newer MuJoCo releases,
-# sitting between ``dist`` and ``nray``. Rather than pin a version, resolve the
-# arity from the binding itself: try the newer form once and remember which one
-# this build accepts. Passing ``normal=None`` asks MuJoCo not to fill it in, so
-# the two paths return identical results.
-_MULTIRAY_TAKES_NORMAL = None
-
-
-def _multi_ray(**kwargs):
-    global _MULTIRAY_TAKES_NORMAL
-
-    if _MULTIRAY_TAKES_NORMAL is not False:
-        try:
-            mujoco.mj_multiRay(normal=None, **kwargs)
-            _MULTIRAY_TAKES_NORMAL = True
-            return
-        except TypeError:
-            if _MULTIRAY_TAKES_NORMAL is True:
-                raise          # arity already proven, so this is a real error
-            _MULTIRAY_TAKES_NORMAL = False
-
-    mujoco.mj_multiRay(**kwargs)
-
-
 def _numeric(model, name, default=None):
     """Read a <custom><numeric> array from the model, or return ``default``."""
     idx = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_NUMERIC, name)
@@ -110,9 +86,6 @@ def build_ray_pattern(config):
     """
     config.validate()
 
-    # Azimuth always wraps a full turn, so the requested step is snapped to
-    # the nearest exact division of 360 -- a step that does not divide evenly
-    # would otherwise leave a seam or double-sample one bearing.
     n_azimuth = int(round(360.0 / config.azimuth_step))
     if n_azimuth < 1:
         raise ValueError("azimuth_step too large, no beams generated")
@@ -124,8 +97,8 @@ def build_ray_pattern(config):
 
     azimuths = np.arange(n_azimuth) * (360.0 / n_azimuth)
 
-    el = np.radians(elevations)[:, None]        # (rings, 1)
-    az = np.radians(azimuths)[None, :]          # (1, n_azimuth)
+    el = np.radians(elevations)[:, None]
+    az = np.radians(azimuths)[None, :]
     cos_el = np.cos(el)
 
     dirs = np.stack([
@@ -134,7 +107,6 @@ def build_ray_pattern(config):
         np.broadcast_to(np.sin(el), (config.rings, n_azimuth)),
     ], axis=-1)
 
-    # float64 and contiguous: mj_multiRay reads this buffer directly.
     return np.ascontiguousarray(dirs.reshape(-1, 3), dtype=np.float64), n_azimuth
 
 
@@ -173,18 +145,13 @@ class LidarScanner:
         if exclude_body is None:
             exclude_body = int(model.site_bodyid[self.site_id])
         self.exclude_body = int(exclude_body)
-        # A real bool: newer MuJoCo bindings declare this parameter as bool.
         self.flg_static = bool(include_static)
         self.geomgroup = (None if geomgroup is None
                           else np.asarray(geomgroup, dtype=np.uint8))
 
-        # Allocated once and reused: mj_multiRay writes into these in place,
-        # so a scan does no per-frame allocation beyond the output slice.
         self._world_dirs = np.zeros((self.n_rays, 3), dtype=np.float64)
         self._dist = np.zeros(self.n_rays, dtype=np.float64)
         self._geomid = np.zeros(self.n_rays, dtype=np.int32)
-
-    # -- pose ---------------------------------------------------------------
 
     def origin(self):
         """Sensor origin in world coordinates, shape (3,)."""
@@ -202,8 +169,6 @@ class LidarScanner:
             self.data.site_xmat[self.site_id], dtype=np.float64))
         return q
 
-    # -- scanning -----------------------------------------------------------
-
     def scan(self, return_mask=False):
         """Cast every beam once and return the hits.
 
@@ -217,11 +182,9 @@ class LidarScanner:
         origin = self.origin()
         rot = self.rotation()
 
-        # Sensor-frame directions -> world frame, as one matmul into a
-        # preallocated buffer. rot @ d for every row d is (D @ rot.T).
         np.matmul(self.pattern, rot.T, out=self._world_dirs)
 
-        _multi_ray(
+        mujoco.mj_multiRay(
             m=self.model,
             d=self.data,
             pnt=origin,
@@ -231,17 +194,13 @@ class LidarScanner:
             bodyexclude=self.exclude_body,
             geomid=self._geomid,
             dist=self._dist,
+            normal=None,
             nray=self.n_rays,
             cutoff=self.config.max_range,
         )
 
-        # geomid < 0 means the beam escaped. Dropping it is the honest
-        # encoding: padding non-returns to max range fabricates a shell of
-        # points that no real sensor would report.
         hit = (self._geomid >= 0) & (self._dist > 0.0)
 
-        # The pattern rows are unit vectors, so scaling by range gives the
-        # sensor-frame point directly -- no second rotation needed.
         points = (self.pattern[hit] * self._dist[hit, None]).astype(np.float32)
 
         return (points, hit) if return_mask else points

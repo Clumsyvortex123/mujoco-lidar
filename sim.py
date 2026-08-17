@@ -60,7 +60,6 @@ class LidarSim:
             print(f"[sim] wrote scene xml to {args.dump_xml} "
                   f"(it <include>s lidar_3d.xml)")
 
-        # XML is the source of truth; CLI flags override only what was given.
         config = LidarConfig.from_model(self.model)
         for attr, value in (("rings", args.rings),
                             ("elev_min", args.elev_min),
@@ -75,8 +74,6 @@ class LidarSim:
                                     site=args.site, config=config)
         self.publish_rate = config.rate
 
-        # The lidar body is a mocap body, so its pose is written directly
-        # rather than driven by actuators or joints.
         body_id = int(self.model.site_bodyid[self.scanner.site_id])
         self.mocap_id = int(self.model.body_mocapid[body_id])
         if self.mocap_id < 0:
@@ -100,8 +97,6 @@ class LidarSim:
         print(f"[sim] rate    : {self.publish_rate} Hz")
         print(f"[sim] publish : {args.points_topic}")
         print(f"[sim] commands: {args.cmd_topic}")
-
-    # -- pose control -------------------------------------------------------
 
     def _on_cmd(self, sample):
         """Zenoh handler. Runs on a zenoh thread, so it only queues."""
@@ -169,8 +164,6 @@ class LidarSim:
         self.data.mocap_pos[self.mocap_id] = pos
         self.data.mocap_quat[self.mocap_id] = [np.cos(half), 0.0, 0.0, np.sin(half)]
 
-    # -- main loop ----------------------------------------------------------
-
     def publish(self):
         points = self.scanner.scan()
         blob = pack_cloud(points, self.scanner.origin(), self.scanner.quat(),
@@ -196,7 +189,6 @@ class LidarSim:
             if now >= next_pub:
                 last_points = self.publish()
                 frames += 1
-                # Skip missed slots rather than catching up in a burst.
                 next_pub = max(now, next_pub + period)
 
             if self.args.stats and now - last_report >= 2.0:
@@ -211,9 +203,6 @@ class LidarSim:
                 time.sleep(max(0.0, self.model.opt.timestep * 0.5))
             return
 
-        # Imported lazily under a distinct name: a bare `import mujoco.viewer`
-        # would bind a local `mujoco` inside run(), which the step_once()
-        # closure would then resolve to instead of the module global.
         from mujoco import viewer as mj_viewer
         with mj_viewer.launch_passive(
             self.model, self.data, key_callback=self._key_callback,
@@ -303,12 +292,6 @@ def main():
         sim.close()
         print("[sim] stopped")
 
-    # MuJoCo's passive viewer can fault inside its own teardown during
-    # interpreter shutdown (reproducible with mujoco 3.11 on Linux/GLFW), which
-    # prints a "Segmentation fault (core dumped)" long after the simulator has
-    # finished and closed its session. Everything we own is already shut down
-    # and flushed at this point, so leave immediately rather than hand control
-    # to that destructor.
     sys.stdout.flush()
     sys.stderr.flush()
     os._exit(code)

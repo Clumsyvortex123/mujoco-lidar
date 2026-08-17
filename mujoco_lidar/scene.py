@@ -16,14 +16,10 @@ import mujoco
 
 __all__ = ["SceneSpec", "build_scene_xml", "load_scene", "LIDAR_XML_PATH"]
 
-# The sensor definition ships inside the package, so it resolves the same way
-# whether the repo was cloned or the package was pip installed.
 MODEL_DIR = Path(__file__).resolve().parent / "model"
 LIDAR_XML_PATH = MODEL_DIR / "lidar_3d.xml"
 LIDAR_XML_NAME = "lidar_3d.xml"
 
-# Six height tiers give the skyline vertical structure, so different elevation
-# rings land on different surfaces instead of one flat silhouette.
 HEIGHT_TIERS = (1.6, 2.6, 3.8, 5.2, 7.0, 9.5)
 
 SCENE_TEMPLATE = """
@@ -108,25 +104,18 @@ def build_scene_xml(spec):
     n_pillars = 0
     for i in range(spec.rows):
         for j in range(spec.cols):
-            # Streets: skipping whole rows and columns leaves corridors you
-            # can actually drive the sensor down.
             if i % spec.block == spec.block - 1 or j % spec.block == spec.block - 1:
                 continue
 
             x = (i - (spec.rows - 1) / 2.0) * spec.spacing
             y = (j - (spec.cols - 1) / 2.0) * spec.spacing
 
-            # With an odd row/column count a cell lands exactly on the origin
-            # and the sensor would spawn *inside* it -- every beam then
-            # returns about a metre and the cloud collapses to a ball.
             if spec.spawn_clearance > 0:
                 dx = x - spec.spawn_xy[0]
                 dy = y - spec.spawn_xy[1]
                 if dx * dx + dy * dy < spec.spawn_clearance ** 2:
                     continue
 
-            # Deterministic tier from a cheap integer hash of the cell, so a
-            # given spec always produces the same world.
             tier = (i * 7 + j * 13 + (i * j) % 5) % len(HEIGHT_TIERS)
             height = HEIGHT_TIERS[tier]
             radius = spec.pillar_radius * (0.85 + 0.30 * float(rng.random()))
@@ -141,8 +130,6 @@ def build_scene_xml(spec):
                 f'pos="{x:.3f} {y:.3f} {height / 2:.3f}" material="tier{tier}"/>')
             n_pillars += 1
 
-    # Perimeter walls so distant beams terminate on something instead of
-    # flying off to the cutoff and being dropped.
     w = spec.half_extent + spec.spacing
     t = 0.15
     h = spec.wall_height
