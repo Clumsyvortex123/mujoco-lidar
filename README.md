@@ -8,12 +8,12 @@ Ships with a demo world of vertical obstacles, a keyboard-driven sensor, and a
 browser point cloud viewer — but the sensor itself has no dependency on any of
 that. Core requirements are **mujoco and numpy only**.
 
-![Azimuth samples around a ring, rings stacked in elevation, and one azimuth column swept across every ring](docs/beam_pattern.gif)
+![The simulated obstacle field beside the live lidar point cloud, both drawn in the same isometric view as the sensor drives a loop](docs/sim_vs_cloud.gif)
 
-A scan is a lattice, not a bag of directions: **azimuth step** samples one ring
-around a full turn, **rings** stack those circles in elevation, and
-**elev_min/max** set how wide the fan opens. The last shot sweeps one azimuth
-column — every ring at the same bearing.
+The simulated world on the left, and **only what the sensor actually returns**
+on the right — same isometric camera on both, so every point sits exactly where
+the geometry it came from sits. Watch the shadows: pillars occlude each other,
+and the returns behind them simply are not there.
 
 ```
       model                        scanner                      cloud
@@ -144,6 +144,15 @@ property lives:**
 | `lidar_azimuth_step` | float | Horizontal angular resolution in degrees. Azimuth always covers a full 360°, so the step is snapped to the nearest exact division — `0.7` gives 514 beams at 0.7004°, never a seam or a doubled bearing. |
 | `lidar_max_range` | float | Beam cutoff in metres. A beam reaching this without hitting geometry is a **non-return and is dropped**, not emitted as a max-range point. |
 | `lidar_rate` | float | Suggested scan rate in Hz. The scanner is stateless and rate-free; this is the default an application should adopt. |
+
+What those three geometry values actually build:
+
+![Azimuth samples around a ring, rings stacked in elevation, the fan widening with the elevation span, and one azimuth column swept across every ring](docs/beam_pattern.gif)
+
+A scan is a lattice, not a bag of directions: `lidar_azimuth_step` samples one
+ring around a full turn, `lidar_rings` stacks those circles in elevation, and
+`lidar_elevation` sets how wide the fan opens. The final shot sweeps a single
+azimuth column — every ring at the same bearing.
 
 Beam count follows directly:
 
