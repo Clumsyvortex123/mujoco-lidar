@@ -23,6 +23,7 @@ import os
 import signal
 import sys
 import threading
+import traceback
 import time
 from collections import deque
 
@@ -292,11 +293,25 @@ def main():
     signal.signal(signal.SIGINT, lambda *_: setattr(sim, "done", True))
     signal.signal(signal.SIGTERM, lambda *_: setattr(sim, "done", True))
 
+    code = 0
     try:
         sim.run()
+    except Exception:
+        traceback.print_exc()
+        code = 1
     finally:
         sim.close()
         print("[sim] stopped")
+
+    # MuJoCo's passive viewer can fault inside its own teardown during
+    # interpreter shutdown (reproducible with mujoco 3.11 on Linux/GLFW), which
+    # prints a "Segmentation fault (core dumped)" long after the simulator has
+    # finished and closed its session. Everything we own is already shut down
+    # and flushed at this point, so leave immediately rather than hand control
+    # to that destructor.
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(code)
 
 
 if __name__ == "__main__":

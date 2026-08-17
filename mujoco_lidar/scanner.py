@@ -14,6 +14,30 @@ import mujoco
 __all__ = ["LidarConfig", "LidarScanner"]
 
 
+# ``mj_multiRay`` gained a ``normal`` output array in newer MuJoCo releases,
+# sitting between ``dist`` and ``nray``. Rather than pin a version, resolve the
+# arity from the binding itself: try the newer form once and remember which one
+# this build accepts. Passing ``normal=None`` asks MuJoCo not to fill it in, so
+# the two paths return identical results.
+_MULTIRAY_TAKES_NORMAL = None
+
+
+def _multi_ray(**kwargs):
+    global _MULTIRAY_TAKES_NORMAL
+
+    if _MULTIRAY_TAKES_NORMAL is not False:
+        try:
+            mujoco.mj_multiRay(normal=None, **kwargs)
+            _MULTIRAY_TAKES_NORMAL = True
+            return
+        except TypeError:
+            if _MULTIRAY_TAKES_NORMAL is True:
+                raise          # arity already proven, so this is a real error
+            _MULTIRAY_TAKES_NORMAL = False
+
+    mujoco.mj_multiRay(**kwargs)
+
+
 def _numeric(model, name, default=None):
     """Read a <custom><numeric> array from the model, or return ``default``."""
     idx = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_NUMERIC, name)
@@ -149,7 +173,8 @@ class LidarScanner:
         if exclude_body is None:
             exclude_body = int(model.site_bodyid[self.site_id])
         self.exclude_body = int(exclude_body)
-        self.flg_static = 1 if include_static else 0
+        # A real bool: newer MuJoCo bindings declare this parameter as bool.
+        self.flg_static = bool(include_static)
         self.geomgroup = (None if geomgroup is None
                           else np.asarray(geomgroup, dtype=np.uint8))
 
@@ -196,7 +221,7 @@ class LidarScanner:
         # preallocated buffer. rot @ d for every row d is (D @ rot.T).
         np.matmul(self.pattern, rot.T, out=self._world_dirs)
 
-        mujoco.mj_multiRay(
+        _multi_ray(
             m=self.model,
             d=self.data,
             pnt=origin,

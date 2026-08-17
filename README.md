@@ -378,6 +378,13 @@ Two behaviours to know:
   design, so it flies straight through pillars. If returns jump to 100% of the
   beam count and the cloud shrinks to a blob at the gizmo, you are inside an
   obstacle — press `R`.
+* **`sim.py` exits via `os._exit`.** MuJoCo's passive viewer can fault inside its
+  own teardown during interpreter shutdown (reproducible on mujoco 3.11 with
+  GLFW on Linux), printing `Segmentation fault (core dumped)` after the run has
+  already finished cleanly. The demo shuts its session down and then leaves
+  immediately rather than hand control to that destructor. If you drive
+  `LidarScanner` from your own `launch_passive` script and see the same crash on
+  exit, that is where it comes from — not from the scan.
 
 ```bash
 ./run_sim.sh --rings 64 --azimuth-step 0.5      # 46k beams, dense
