@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mujoco-lidar"
+version = "1.0.0"
+description = "A reusable 3D lidar sensor model for MuJoCo"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+keywords = ["mujoco", "lidar", "robotics", "simulation", "point-cloud"]
+classifiers = [
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Topic :: Scientific/Engineering",
+]
+dependencies = [
+  "mujoco>=3.2",
+  "numpy>=1.24",
+]
+
+# The core sensor needs only mujoco and numpy. The demo simulator and the
+# browser viewer add a transport and a web server; neither is required to use
+# the scanner in your own project.
+[project.optional-dependencies]
+demo = [
+  "eclipse-zenoh>=1.0,<2",
+  "flask>=2.3",
+]
+
+[tool.setuptools.packages.find]
+include = ["mujoco_lidar*"]
+
+[tool.setuptools.package-data]
+mujoco_lidar = ["model/*.xml"]

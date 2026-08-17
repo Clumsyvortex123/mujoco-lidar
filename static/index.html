@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MuJoCo 3D Lidar Viewer</title>
+<style>
+  :root {
+    --bg: #0b0d11;
+    --panel: rgba(18, 21, 28, 0.86);
+    --border: #2a303c;
+    --fg: #dfe4ec;
+    --muted: #8b94a6;
+    --accent: #f2803c;
+    --ok: #4ec9a0;
+    --bad: #e2554d;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    background: var(--bg); color: var(--fg);
+    font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  #gl { display: block; width: 100vw; height: 100vh; cursor: grab; }
+  #gl.dragging { cursor: grabbing; }
+
+  .panel {
+    position: fixed;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    backdrop-filter: blur(8px);
+    user-select: none;
+  }
+  #stats { top: 12px; left: 12px; min-width: 232px; }
+  #controls { top: 12px; right: 12px; width: 216px; }
+  #help { bottom: 12px; left: 12px; }
+  #banner {
+    bottom: 12px; right: 12px; color: var(--muted); font-size: 11px;
+  }
+
+  h2 {
+    margin: 0 0 8px; font-size: 11px; letter-spacing: .10em;
+    text-transform: uppercase; color: var(--muted); font-weight: 600;
+  }
+  .row { display: flex; justify-content: space-between; gap: 12px; }
+  .row + .row { margin-top: 2px; }
+  .k { color: var(--muted); }
+  .v { font-variant-numeric: tabular-nums; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+         background: var(--bad); margin-right: 6px; vertical-align: 1px; }
+  .dot.live { background: var(--ok); }
+
+  label.field { display: block; margin-top: 10px; color: var(--muted); font-size: 11px; }
+  input[type=range] { width: 100%; accent-color: var(--accent); margin-top: 3px; }
+  .seg { display: flex; gap: 4px; margin-top: 4px; }
+  .seg button {
+    flex: 1; padding: 4px 6px; font: inherit; font-size: 11px;
+    color: var(--fg); background: #1b202a;
+    border: 1px solid var(--border); border-radius: 5px; cursor: pointer;
+  }
+  .seg button.on { background: var(--accent); border-color: var(--accent); color: #14161b; }
+  .toggle { display: flex; align-items: center; gap: 7px; margin-top: 10px; cursor: pointer; }
+  .toggle input { accent-color: var(--accent); }
+
+  kbd {
+    display: inline-block; min-width: 19px; text-align: center;
+    padding: 1px 5px; margin-right: 2px;
+    background: #1b202a; border: 1px solid var(--border);
+    border-bottom-width: 2px; border-radius: 4px; font-size: 11px;
+  }
+  #help .row { justify-content: flex-start; }
+  #help .k { margin-left: 8px; }
+  #err { color: var(--bad); margin-top: 6px; font-size: 11px; display: none; }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+
+<div class="panel" id="stats">
+  <h2>Lidar Stream</h2>
+  <div class="row"><span class="k"><span class="dot" id="dot"></span>status</span><span class="v" id="s-status">waiting</span></div>
+  <div class="row"><span class="k">points</span><span class="v" id="s-points">&mdash;</span></div>
+  <div class="row"><span class="k">rate</span><span class="v" id="s-rate">&mdash;</span></div>
+  <div class="row"><span class="k">frame</span><span class="v" id="s-seq">&mdash;</span></div>
+  <div class="row"><span class="k">sensor xyz</span><span class="v" id="s-pos">&mdash;</span></div>
+  <div class="row"><span class="k">heading</span><span class="v" id="s-yaw">&mdash;</span></div>
+  <div id="err"></div>
+</div>
+
+<div class="panel" id="controls">
+  <h2>Display</h2>
+  <label class="field">colour by</label>
+  <div class="seg" id="seg-color">
+    <button data-mode="0" class="on">height</button>
+    <button data-mode="1">range</button>
+  </div>
+  <label class="field">point size <span class="v" id="lbl-size">2.5</span></label>
+  <input type="range" id="pt-size" min="1" max="8" step="0.5" value="2.5">
+  <label class="field">max range shown <span class="v" id="lbl-range">35</span> m</label>
+  <input type="range" id="max-range" min="2" max="60" step="1" value="35">
+  <label class="toggle"><input type="checkbox" id="follow"> camera follows sensor</label>
+  <label class="toggle"><input type="checkbox" id="grid" checked> ground grid</label>
+</div>
+
+<div class="panel" id="help">
+  <h2>Drive the lidar</h2>
+  <div class="row"><span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><span class="k">move in heading frame</span></div>
+  <div class="row"><span><kbd>I</kbd><kbd>K</kbd></span><span class="k">up / down</span></div>
+  <div class="row"><span><kbd>Q</kbd><kbd>E</kbd></span><span class="k">yaw left / right</span></div>
+  <div class="row"><span><kbd>R</kbd></span><span class="k">reset pose</span></div>
+  <div class="row"><span class="k" style="margin-left:0">drag orbit &middot; wheel zoom &middot; right-drag pan</span></div>
+</div>
+
+<div class="panel" id="banner">mujoco-lidar &middot; zenoh &rarr; flask &rarr; webgl</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

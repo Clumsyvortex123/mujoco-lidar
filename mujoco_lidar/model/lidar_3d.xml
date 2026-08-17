@@ -1,0 +1,122 @@
+<mujoco model="lidar_3d">
+  <!--
+  ===========================================================================
+  Reusable 3D (spinning-equivalent) lidar for MuJoCo.
+  ===========================================================================
+
+  This file defines ONLY the sensor. It carries no world, no ground, no
+  obstacles, so it can be dropped into any model:
+
+      <mujoco model="my_robot">
+        <include file="lidar_3d.xml"/>
+        ...your world...
+      </mujoco>
+
+  Two things make the sensor work:
+
+    1. <site name="lidar_origin">  -- the ray origin AND the ray frame.
+       Every beam is cast from this site's world position, with directions
+       rotated by the site's world orientation. Moving or rotating the site
+       (or its parent body) aims the sensor; you never touch Python for that.
+
+    2. <custom><numeric>           -- the beam pattern.
+       MJCF has no native concept of "32 rings at 0.9 degrees", so the
+       parameters live as named numeric arrays that the scanner reads back
+       at load time via mjOBJ_NUMERIC.
+
+  There are deliberately NO <rangefinder> sensor elements here. MuJoCo
+  evaluates declared sensors on every physics step, so one rangefinder per
+  beam would raycast at the full simulation rate (12800 beams x 250 Hz)
+  regardless of how slowly you actually consume scans. The scanner instead
+  issues one batched mj_multiRay call per published frame. See the README
+  section "Why not <rangefinder>?".
+
+  ---------------------------------------------------------------------------
+  CONFIGURABLE PROPERTIES
+  ---------------------------------------------------------------------------
+
+  Beam pattern -- edit the <numeric> values below:
+
+    lidar_rings         int    Number of vertical beams (elevation layers).
+                               Beam count = rings * round(360 / azimuth_step).
+
+    lidar_elevation     2      Elevation span in degrees, "min max".
+                               NEGATIVE IS DOWN, POSITIVE IS UP.
+                               Rings are spaced linearly across this span.
+                               With rings=1 the single ring sits at the
+                               midpoint of the span.
+
+    lidar_azimuth_step  float  Horizontal angular resolution in degrees.
+                               Azimuth always covers a full 360 degrees, so
+                               the step is snapped to the nearest exact
+                               division: step 0.7 -> 514 beams at 0.7004 deg.
+
+    lidar_max_range     float  Beam cutoff in metres. A beam that reaches
+                               this distance without hitting geometry is a
+                               NON-RETURN and is dropped from the cloud, not
+                               emitted as a max-range point.
+
+    lidar_rate          float  Suggested scan rate in Hz. The scanner itself
+                               is stateless and rate-free; the application
+                               decides when to call scan(). This value is
+                               just the default an application should use.
+
+  Mount pose -- edit the <site>:
+
+    site pos            3      Sensor origin relative to the parent body.
+    site quat / euler   4 / 3  Sensor orientation relative to the parent body.
+                               The ray frame is +X forward, +Y left, +Z up.
+
+  Mount rigidly on a robot instead of free-flying:
+
+    Copy the <body name="lidar"> block into your own body and DELETE the
+    mocap="true" attribute. A mocap body must be a direct child of
+    <worldbody>, which is exactly what you do not want on a robot. The
+    scanner excludes the site's own body from raycasting, so keeping the
+    housing on its own small child body means it never sees itself.
+
+  Housing appearance -- edit the "lidar" default class or the geoms. The
+  housing is contype/conaffinity 0, so it is visual only and never collides.
+  -->
+
+  <compiler angle="degree"/>
+
+  <asset>
+    <material name="lidar_shell" rgba="0.95 0.36 0.16 1"/>
+    <material name="lidar_glass" rgba="0.18 0.22 0.30 1"/>
+  </asset>
+
+  <default>
+    <default class="lidar">
+      <!-- Visual only: rays ignore contype/conaffinity, but physics should
+           not, or a free-flying sensor would bounce off the world. -->
+      <geom contype="0" conaffinity="0" group="2" mass="0.001"/>
+      <site type="sphere" size="0.012" rgba="1.0 0.90 0.25 1" group="2"/>
+    </default>
+  </default>
+
+  <custom>
+    <numeric name="lidar_rings"        data="32"/>
+    <numeric name="lidar_elevation"    data="-22 15"/>
+    <numeric name="lidar_azimuth_step" data="0.9"/>
+    <numeric name="lidar_max_range"    data="35"/>
+    <numeric name="lidar_rate"         data="10"/>
+  </custom>
+
+  <worldbody>
+    <body name="lidar" mocap="true" pos="0 0 1.5">
+      <geom name="lidar_base"  class="lidar" type="cylinder"
+            size="0.045 0.022" pos="0 0 -0.030" material="lidar_shell"/>
+      <geom name="lidar_drum"  class="lidar" type="cylinder"
+            size="0.042 0.028" pos="0 0  0.004" material="lidar_glass"/>
+      <geom name="lidar_cap"   class="lidar" type="cylinder"
+            size="0.045 0.008" pos="0 0  0.040" material="lidar_shell"/>
+      <!-- Forward pointer: makes the +X heading readable in the viewer. -->
+      <geom name="lidar_nose"  class="lidar" type="box"
+            size="0.055 0.008 0.004" pos="0.055 0 0.004" material="lidar_shell"/>
+
+      <!-- THE SENSOR. Ray origin and ray frame. -->
+      <site name="lidar_origin" class="lidar" pos="0 0 0.004"/>
+    </body>
+  </worldbody>
+</mujoco>
